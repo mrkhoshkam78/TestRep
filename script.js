@@ -1,16 +1,10 @@
 'use strict';
 
 /* ============================================================
-   PinBoard — منطق برنامه (Immersive Hero + Multi-Source API)
-   - Unsplash جایگزین منبع قبلی شده (از طریق پروکسی بک‌اند امن)
-   - Pexels و منابع دیگر قابل افزودن هستند
-   - کلید API هرگز در فرانت‌اند قرار نمی‌گیرد
-   - جستجو روی title / note / category / subcategory / tags با امتیازدهی
+   PinBoard — Immersive Hero + Unsplash-ready (secure)
+   کلید API در فرانت نیست. برای Unsplash واقعی از پروکسی بک‌اند استفاده کن.
    ============================================================ */
 
-/* ---------------------------------------------------------
-   1) پیکربندی دسته‌بندی‌ها (بدون تغییر)
-   --------------------------------------------------------- */
 const CATEGORIES = [
   { id: 'all',          label: 'همه',           color: '#e6e6e6', subcategories: [] },
   { id: 'architecture', label: 'معماری',       color: '#7ea1ff', subcategories: ['خانه‌های مینیمال', 'فضای داخلی', 'نمای بیرونی', 'فضای عمومی'] },
@@ -20,82 +14,51 @@ const CATEGORIES = [
   { id: 'tech',         label: 'تکنولوژی',     color: '#8f7bff', subcategories: ['گجت', 'رابط کاربری', 'هوش مصنوعی', 'ست‌آپ کار'] },
   { id: 'ideas',        label: 'ایده‌ها',      color: '#ff9a5a', subcategories: ['الهام‌بخش', 'دیزاین گرافیک', 'بردهای الهام', 'یادداشت‌ها'] },
 ];
-
 const categoryById = Object.fromEntries(CATEGORIES.map(c => [c.id, c]));
 
-/* ---------------------------------------------------------
-   2) داده‌های Mock (آرشیو شخصی محلی)
-   --------------------------------------------------------- */
-const HEIGHT_VARIANTS = [300, 340, 380, 420, 460, 500, 540, 320, 400, 440];
-function h(seed) { return HEIGHT_VARIANTS[seed % HEIGHT_VARIANTS.length]; }
-function img(seed) { return `https://picsum.photos/seed/pinboard-${seed}/480/${h(seed)}`; }
+/* تصاویر واقعی Unsplash (بدون نیاز به API Key برای نمایش) */
+const U = (id, w = 480, h = 640) =>
+  `https://images.unsplash.com/${id}?auto=format&fit=crop&w=${w}&h=${h}&q=80`;
 
 let MOCK_PINS = [
-  { id: 'p1',  title: 'آپارتمان مینیمال با نور طبیعی',      category: 'architecture', subcategory: 'فضای داخلی',   tags: ['مینیمال', 'نور طبیعی', 'چوب'],         note: 'ترکیب چوب روشن و دیوار سفید خیلی آرامش‌بخشه.', sourceUrl: 'https://unsplash.com/photos/example1', imageUrl: img(1) },
-  { id: 'p2',  title: 'نمای بتنی خانه‌ی مدرن',               category: 'architecture', subcategory: 'نمای بیرونی',  tags: ['بتن‌نما', 'مدرن'],                      note: '', sourceUrl: 'https://unsplash.com/photos/example2', imageUrl: img(2) },
-  { id: 'p3',  title: 'انگشتر ساده طلای رزگلد',               category: 'jewelry',      subcategory: 'انگشتر',       tags: ['رزگلد', 'ساده', 'روزمره'],              note: 'برای ست کردن با ساعت مینیمال.', sourceUrl: 'https://unsplash.com/photos/example3', imageUrl: img(3) },
-  { id: 'p4',  title: 'گردنبند زنجیری ظریف',                  category: 'jewelry',      subcategory: 'گردنبند',      tags: ['ظریف', 'نقره'],                         note: '', sourceUrl: 'https://unsplash.com/photos/example4', imageUrl: img(4) },
-  { id: 'p5',  title: 'استایل خیابانی پاییزی',                category: 'fashion',      subcategory: 'استریت‌استایل', tags: ['پاییز', 'لایه‌بندی', 'کژوال'],          note: 'ایده برای ست پاییزی با کت بلند.', sourceUrl: 'https://unsplash.com/photos/example5', imageUrl: img(5) },
-  { id: 'p6',  title: 'کفش اسنیکر سفید کلاسیک',               category: 'fashion',      subcategory: 'کفش',          tags: ['سنیکر', 'سفید', 'کلاسیک'],              note: '', sourceUrl: 'https://unsplash.com/photos/example6', imageUrl: img(6) },
-  { id: 'p7',  title: 'ساحل صخره‌ای در غروب',                 category: 'travel',       subcategory: 'ساحلی',        tags: ['غروب', 'دریا', 'آرامش'],                note: 'مقصد احتمالی تعطیلات تابستون.', sourceUrl: 'https://unsplash.com/photos/example7', imageUrl: img(7) },
-  { id: 'p8',  title: 'کوچه‌های قدیمی شهر تاریخی',            category: 'travel',       subcategory: 'شهری',         tags: ['معماری قدیمی', 'گردشگری'],              note: '', sourceUrl: 'https://unsplash.com/photos/example8', imageUrl: img(8) },
-  { id: 'p9',  title: 'ست‌آپ کار مینیمال با مک‌بوک',           category: 'tech',         subcategory: 'ست‌آپ کار',    tags: ['ست‌آپ', 'مینیمال', 'دسکتاپ'],           note: 'الهام برای چیدمان میز کار جدید.', sourceUrl: 'https://unsplash.com/photos/example9', imageUrl: img(9) },
-  { id: 'p10', title: 'رابط کاربری اپلیکیشن موسیقی',          category: 'tech',         subcategory: 'رابط کاربری',  tags: ['UI', 'دارک‌مود', 'اپ'],                 note: 'الگوی خوب برای پلیر موزیک.', sourceUrl: 'https://unsplash.com/photos/example10', imageUrl: img(10) },
-  { id: 'p11', title: 'برد الهام برای پروژه‌ی برندینگ',       category: 'ideas',        subcategory: 'بردهای الهام', tags: ['برندینگ', 'رنگ‌بندی'],                  note: '', sourceUrl: 'https://unsplash.com/photos/example11', imageUrl: img(11) },
-  { id: 'p12', title: 'تایپوگرافی خلاقانه برای پوستر',        category: 'ideas',        subcategory: 'دیزاین گرافیک', tags: ['تایپوگرافی', 'پوستر'],                 note: 'برای پروژه‌ی بعدی پوستر کنسرت.', sourceUrl: 'https://unsplash.com/photos/example12', imageUrl: img(12) },
-  { id: 'p13', title: 'دستبند چرمی مینیمال',                  category: 'jewelry',      subcategory: 'دستبند',       tags: ['چرم', 'مردانه'],                        note: '', sourceUrl: 'https://unsplash.com/photos/example13', imageUrl: img(13) },
-  { id: 'p14', title: 'کلبه‌ی چوبی میان جنگل',                 category: 'architecture', subcategory: 'خانه‌های مینیمال', tags: ['چوب', 'طبیعت', 'کلبه'],           note: 'ایده برای خانه‌ی ییلاقی.', sourceUrl: 'https://unsplash.com/photos/example14', imageUrl: img(14) },
-  { id: 'p15', title: 'مسیر پیاده‌روی کوهستانی',               category: 'travel',       subcategory: 'کوهستان',      tags: ['طبیعت', 'پیاده‌روی'],                   note: '', sourceUrl: 'https://unsplash.com/photos/example15', imageUrl: img(15) },
-  { id: 'p16', title: 'اکسسوری کیف دستی چرم',                  category: 'fashion',      subcategory: 'اکسسوری',      tags: ['چرم', 'کیف'],                          note: '', sourceUrl: 'https://unsplash.com/photos/example16', imageUrl: img(16) },
+  { id: 'p1',  title: 'آپارتمان مینیمال با نور طبیعی', category: 'architecture', subcategory: 'فضای داخلی', tags: ['مینیمال', 'نور طبیعی', 'چوب'], note: 'ترکیب چوب روشن و دیوار سفید خیلی آرامش‌بخشه.', sourceUrl: 'https://unsplash.com/photos/2FdI0QJYI6Y', imageUrl: U('photo-1616486338812-3dadae4b4ace') },
+  { id: 'p2',  title: 'نمای بتنی خانه‌ی مدرن', category: 'architecture', subcategory: 'نمای بیرونی', tags: ['بتن‌نما', 'مدرن'], note: '', sourceUrl: 'https://unsplash.com/photos/IuLgi9PWETU', imageUrl: U('photo-1600585154340-be6161a56a0c') },
+  { id: 'p3',  title: 'انگشتر ساده طلای رزگلد', category: 'jewelry', subcategory: 'انگشتر', tags: ['رزگلد', 'ساده', 'روزمره'], note: 'برای ست کردن با ساعت مینیمال.', sourceUrl: 'https://unsplash.com/photos/example', imageUrl: U('photo-1605100804763-247f995f9880') },
+  { id: 'p4',  title: 'گردنبند زنجیری ظریف', category: 'jewelry', subcategory: 'گردنبند', tags: ['ظریف', 'نقره'], note: '', sourceUrl: '', imageUrl: U('photo-1599643478518-a784e5dc4c8f') },
+  { id: 'p5',  title: 'استایل خیابانی پاییزی', category: 'fashion', subcategory: 'استریت‌استایل', tags: ['پاییز', 'لایه‌بندی', 'کژوال'], note: 'ایده برای ست پاییزی با کت بلند.', sourceUrl: '', imageUrl: U('photo-1483985988355-763728e1935b') },
+  { id: 'p6',  title: 'کفش اسنیکر سفید کلاسیک', category: 'fashion', subcategory: 'کفش', tags: ['سنیکر', 'سفید', 'کلاسیک'], note: '', sourceUrl: '', imageUrl: U('photo-1542291026-7eec264c27ff') },
+  { id: 'p7',  title: 'ساحل صخره‌ای در غروب', category: 'travel', subcategory: 'ساحلی', tags: ['غروب', 'دریا', 'آرامش'], note: 'مقصد احتمالی تعطیلات تابستون.', sourceUrl: '', imageUrl: U('photo-1507525428034-b723cf961d3e') },
+  { id: 'p8',  title: 'کوچه‌های قدیمی شهر تاریخی', category: 'travel', subcategory: 'شهری', tags: ['معماری قدیمی', 'گردشگری'], note: '', sourceUrl: '', imageUrl: U('photo-1523906834658-6e24ef2386f9') },
+  { id: 'p9',  title: 'ست‌آپ کار مینیمال با مک‌بوک', category: 'tech', subcategory: 'ست‌آپ کار', tags: ['ست‌آپ', 'مینیمال', 'دسکتاپ'], note: 'الهام برای چیدمان میز کار جدید.', sourceUrl: '', imageUrl: U('photo-1498050108023-c5249f4df085') },
+  { id: 'p10', title: 'رابط کاربری اپلیکیشن موسیقی', category: 'tech', subcategory: 'رابط کاربری', tags: ['UI', 'دارک‌مود', 'اپ'], note: 'الگوی خوب برای پلیر موزیک.', sourceUrl: '', imageUrl: U('photo-1611162617474-5b21e11e161d') },
+  { id: 'p11', title: 'برد الهام برای پروژه‌ی برندینگ', category: 'ideas', subcategory: 'بردهای الهام', tags: ['برندینگ', 'رنگ‌بندی'], note: '', sourceUrl: '', imageUrl: U('photo-1558655146-d09347e92766') },
+  { id: 'p12', title: 'تایپوگرافی خلاقانه برای پوستر', category: 'ideas', subcategory: 'دیزاین گرافیک', tags: ['تایپوگرافی', 'پوستر'], note: 'برای پروژه‌ی بعدی پوستر کنسرت.', sourceUrl: '', imageUrl: U('photo-1561070791-2526d30994b5') },
+  { id: 'p13', title: 'دستبند چرمی مینیمال', category: 'jewelry', subcategory: 'دستبند', tags: ['چرم', 'مردانه'], note: '', sourceUrl: '', imageUrl: U('photo-1611591437281-460bfbe1220a') },
+  { id: 'p14', title: 'کلبه‌ی چوبی میان جنگل', category: 'architecture', subcategory: 'خانه‌های مینیمال', tags: ['چوب', 'طبیعت', 'کلبه'], note: 'ایده برای خانه‌ی ییلاقی.', sourceUrl: '', imageUrl: U('photo-1449158743715-0a90ebb6d2d8') },
+  { id: 'p15', title: 'مسیر پیاده‌روی کوهستانی', category: 'travel', subcategory: 'کوهستان', tags: ['طبیعت', 'پیاده‌روی'], note: '', sourceUrl: '', imageUrl: U('photo-1464822759023-fed622ff2c3b') },
+  { id: 'p16', title: 'اکسسوری کیف دستی چرم', category: 'fashion', subcategory: 'اکسسوری', tags: ['چرم', 'کیف'], note: '', sourceUrl: '', imageUrl: U('photo-1548036328-c085560c53e5') },
 ];
 
-/* ---------------------------------------------------------
-   3) لایه‌ی داده (PinAPI) — Multi-source & secure
-   کلیدهای API فقط در بک‌اند نگهداری می‌شوند.
-   فرانت فقط به endpoint پروکسی خودتان درخواست می‌زند.
-   مثال: POST /api/search { source: 'unsplash', query: '...' }
-   --------------------------------------------------------- */
+/* ---------- API Layer (secure, multi-source) ---------- */
 const API_CONFIG = {
-  // در پروداکشن این مقدار را به آدرس بک‌اند خود تنظیم کنید
-  // مثال: 'https://your-backend.com/api'
-  // خالی = فقط جستجوی محلی + حالت دمو
+  // در پروداکشن: 'https://your-backend.com/api'
+  // کلید Unsplash / Pexels فقط در بک‌اند
   proxyBase: '',
-
-  // منابع پشتیبانی‌شده (قابل گسترش)
-  sources: {
-    local:    { label: 'آرشیو شخصی', enabled: true },
-    unsplash: { label: 'Unsplash',   enabled: true },
-    pexels:   { label: 'Pexels',     enabled: true },
-  },
 };
 
 const PinAPI = {
-  /** دریافت تمام پین‌های محلی (آرشیو شخصی) */
   async getAll() {
-    return Promise.resolve([...MOCK_PINS]);
+    return [...MOCK_PINS];
   },
-
-  /** ایجاد پین جدید در آرشیو محلی */
   async create(pinData) {
-    const newPin = {
-      id: 'p' + Date.now(),
-      ...pinData,
-    };
+    const newPin = { id: 'p' + Date.now(), ...pinData };
     MOCK_PINS = [newPin, ...MOCK_PINS];
-    return Promise.resolve(newPin);
+    return newPin;
   },
-
-  /**
-   * جستجوی خارجی از طریق پروکسی بک‌اند (امن)
-   * @param {string} query
-   * @param {'unsplash'|'pexels'|string} source
-   * @returns {Promise<Array>} نتایج نرمال‌شده به شکل pin
-   */
   async searchExternal(query, source = 'unsplash') {
     const q = (query || '').trim();
     if (!q) return [];
 
-    // اگر پروکسی تنظیم شده باشد → درخواست واقعی به بک‌اند
     if (API_CONFIG.proxyBase) {
       try {
         const res = await fetch(`${API_CONFIG.proxyBase}/search`, {
@@ -103,259 +66,194 @@ const PinAPI = {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ source, query: q, per_page: 12 }),
         });
-        if (!res.ok) throw new Error(`Proxy error ${res.status}`);
+        if (!res.ok) throw new Error(String(res.status));
         const data = await res.json();
-        // انتظار می‌رود بک‌اند آرایه‌ای از آبجکت‌های نرمال‌شده برگرداند
         return Array.isArray(data.results) ? data.results : [];
-      } catch (err) {
-        console.warn('[PinAPI] proxy search failed:', err.message);
+      } catch (e) {
+        console.warn('[PinAPI] proxy failed', e);
         return [];
       }
     }
 
-    // --- حالت دمو (بدون بک‌اند): نتایج شبیه‌سازی‌شده از Unsplash-style ---
-    // در پروداکشن این بخش حذف می‌شود و فقط پروکسی استفاده می‌گردد.
-    console.info(`[PinAPI] demo mode — no proxy. Simulating ${source} results for: "${q}"`);
-    return this._demoExternalResults(q, source);
-  },
-
-  /** نتایج دمو برای تست UI بدون نیاز به کلید */
-  _demoExternalResults(query, source) {
-    const seedBase = query.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
-    const count = 6;
-    const results = [];
-    for (let i = 0; i < count; i++) {
-      const seed = seedBase + i * 17;
-      results.push({
-        id: `ext-${source}-${seed}`,
-        title: `${query} — ${source === 'unsplash' ? 'Unsplash' : 'Pexels'} #${i + 1}`,
-        category: 'ideas',
-        subcategory: 'الهام‌بخش',
-        tags: [query, source, 'external'],
-        note: `نتیجه شبیه‌سازی‌شده از ${source} (برای تست). در پروداکشن از پروکسی بک‌اند می‌آید.`,
-        sourceUrl: source === 'unsplash'
-          ? `https://unsplash.com/s/photos/${encodeURIComponent(query)}`
-          : `https://www.pexels.com/search/${encodeURIComponent(query)}/`,
-        imageUrl: `https://picsum.photos/seed/ext-${seed}/480/${h(seed)}`,
-        _external: true,
-        _source: source,
-      });
-    }
-    return results;
+    // Demo mode (بدون کلید): نتایج شبیه‌سازی با تصاویر Unsplash واقعی
+    const seeds = [
+      'photo-1506905925346-21bda4d32df4',
+      'photo-1469474968028-56623f02e42e',
+      'photo-1441974231531-c6227db76b6e',
+      'photo-1470071459604-3b5ec3a7fe05',
+      'photo-1426604966848-d7adac402bff',
+      'photo-1472214103451-9374bd1c798e',
+    ];
+    return seeds.map((id, i) => ({
+      id: `ext-${source}-${i}-${Date.now()}`,
+      title: `${q} · ${source === 'unsplash' ? 'Unsplash' : 'Pexels'} ${i + 1}`,
+      category: 'ideas',
+      subcategory: 'الهام‌بخش',
+      tags: [q, source, 'جستجو'],
+      note: `نتیجه دمو از ${source}. برای نتایج واقعی، proxyBase را به بک‌اند خود وصل کن.`,
+      sourceUrl: source === 'unsplash'
+        ? `https://unsplash.com/s/photos/${encodeURIComponent(q)}`
+        : `https://www.pexels.com/search/${encodeURIComponent(q)}/`,
+      imageUrl: U(id, 480, 320 + (i % 4) * 80),
+      _external: true,
+      _source: source,
+    }));
   },
 };
 
-/* ---------------------------------------------------------
-   4) State
-   --------------------------------------------------------- */
+/* ---------- State ---------- */
 const state = {
-  pins: [],           // آرشیو شخصی
-  externalPins: [],   // نتایج جستجوی خارجی (موقت)
+  pins: [],
+  externalPins: [],
   activeCategory: 'all',
   searchTerm: '',
-  isExternalMode: false, // وقتی جستجوی خارجی انجام شده
+  isExternalMode: false,
 };
 
-/* ---------------------------------------------------------
-   5) DOM refs
-   --------------------------------------------------------- */
+/* ---------- DOM ---------- */
+const $ = (id) => document.getElementById(id);
 const dom = {
-  navBar: document.getElementById('navBar'),
-  heroCats: document.getElementById('heroCats'),
-  galleryFilters: document.getElementById('galleryFilters'),
-  masonryGrid: document.getElementById('masonryGrid'),
-  emptyState: document.getElementById('emptyState'),
-  emptyTitle: document.getElementById('emptyTitle'),
-  emptyDesc: document.getElementById('emptyDesc'),
-  clearFiltersBtn: document.getElementById('clearFiltersBtn'),
-  sectionTitle: document.getElementById('sectionTitle'),
-  resultCount: document.getElementById('resultCount'),
-  heroSearch: document.getElementById('heroSearch'),
-  heroSearchBtn: document.getElementById('heroSearchBtn'),
-  scrollToGallery: document.getElementById('scrollToGallery'),
-
-  openAddPin: document.getElementById('openAddPin'),
-  modalOverlay: document.getElementById('modalOverlay'),
-  closeModal: document.getElementById('closeModal'),
-  cancelForm: document.getElementById('cancelForm'),
-  pinForm: document.getElementById('pinForm'),
-  formErrorBanner: document.getElementById('formErrorBanner'),
-
-  inputImage: document.getElementById('inputImage'),
-  imgPreview: document.getElementById('imgPreview'),
-  inputTitle: document.getElementById('inputTitle'),
-  inputCategory: document.getElementById('inputCategory'),
-  inputSubcategory: document.getElementById('inputSubcategory'),
-  inputTags: document.getElementById('inputTags'),
-  tagPreview: document.getElementById('tagPreview'),
-  inputNote: document.getElementById('inputNote'),
-  inputSource: document.getElementById('inputSource'),
-
-  toast: document.getElementById('toast'),
+  navBar: $('navBar'),
+  heroCats: $('heroCats'),
+  galleryFilters: $('galleryFilters'),
+  masonryGrid: $('masonryGrid'),
+  emptyState: $('emptyState'),
+  emptyTitle: $('emptyTitle'),
+  emptyDesc: $('emptyDesc'),
+  clearFiltersBtn: $('clearFiltersBtn'),
+  sectionTitle: $('sectionTitle'),
+  resultCount: $('resultCount'),
+  heroSearch: $('heroSearch'),
+  heroSearchBtn: $('heroSearchBtn'),
+  scrollToGallery: $('scrollToGallery'),
+  openAddPin: $('openAddPin'),
+  modalOverlay: $('modalOverlay'),
+  closeModal: $('closeModal'),
+  cancelForm: $('cancelForm'),
+  pinForm: $('pinForm'),
+  formErrorBanner: $('formErrorBanner'),
+  inputImage: $('inputImage'),
+  imgPreview: $('imgPreview'),
+  inputTitle: $('inputTitle'),
+  inputCategory: $('inputCategory'),
+  inputSubcategory: $('inputSubcategory'),
+  inputTags: $('inputTags'),
+  tagPreview: $('tagPreview'),
+  inputNote: $('inputNote'),
+  inputSource: $('inputSource'),
+  toast: $('toast'),
 };
 
-/* ---------------------------------------------------------
-   6) Utils
-   --------------------------------------------------------- */
+/* ---------- Utils ---------- */
 function escapeHtml(str) {
-  return String(str ?? '').replace(/[&<>"']/g, (c) => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
-  }[c]));
+  return String(str ?? '').replace(/[&<>"']/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
-
-function debounce(fn, wait) {
+function debounce(fn, ms) {
   let t;
-  return (...args) => {
-    clearTimeout(t);
-    t = setTimeout(() => fn(...args), wait);
-  };
+  return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); };
 }
-
-let toastTimer = null;
-function showToast(message) {
-  dom.toast.textContent = message;
+let toastTimer;
+function showToast(msg) {
+  if (!dom.toast) return;
+  dom.toast.textContent = msg;
   dom.toast.hidden = false;
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { dom.toast.hidden = true; }, 2800);
 }
 
-/* ---------------------------------------------------------
-   7) Nav scroll + smooth scroll
-   --------------------------------------------------------- */
-function updateNavOnScroll() {
-  const scrolled = window.scrollY > 40;
-  dom.navBar.classList.toggle('scrolled', scrolled);
+/* ---------- Nav ---------- */
+function updateNav() {
+  if (dom.navBar) dom.navBar.classList.toggle('scrolled', window.scrollY > 40);
 }
-window.addEventListener('scroll', updateNavOnScroll, { passive: true });
-updateNavOnScroll();
+window.addEventListener('scroll', updateNav, { passive: true });
+updateNav();
 
-dom.scrollToGallery.addEventListener('click', () => {
-  document.getElementById('gallery').scrollIntoView({ behavior: 'smooth', block: 'start' });
-});
+if (dom.scrollToGallery) {
+  dom.scrollToGallery.addEventListener('click', () => {
+    $('gallery')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+}
 
-/* ---------------------------------------------------------
-   8) Category chips
-   --------------------------------------------------------- */
+/* ---------- Chips ---------- */
 function renderCategoryChips() {
-  const makeChip = (cat, extraClass = '') => `
-    <button class="${extraClass} ${state.activeCategory === cat.id ? 'active' : ''}"
-            data-category="${cat.id}"
-            role="tab"
-            aria-selected="${state.activeCategory === cat.id}">
-      ${escapeHtml(cat.label)}
-    </button>
-  `;
-  dom.heroCats.innerHTML = CATEGORIES.map(c => makeChip(c, 'hero-chip')).join('');
-  dom.galleryFilters.innerHTML = CATEGORIES.map(c => makeChip(c, 'g-chip')).join('');
+  const make = (cat, cls) =>
+    `<button class="${cls} ${state.activeCategory === cat.id ? 'active' : ''}"
+             data-category="${cat.id}" role="tab"
+             aria-selected="${state.activeCategory === cat.id}">
+       ${escapeHtml(cat.label)}
+     </button>`;
+  if (dom.heroCats) dom.heroCats.innerHTML = CATEGORIES.map(c => make(c, 'hero-chip')).join('');
+  if (dom.galleryFilters) dom.galleryFilters.innerHTML = CATEGORIES.map(c => make(c, 'g-chip')).join('');
 }
 
-function setActiveCategory(catId) {
-  state.activeCategory = catId;
-  // اگر در حالت خارجی هستیم و فیلتر دسته می‌زنیم، به محلی برگرد
-  if (state.isExternalMode && catId !== 'all') {
+function setActiveCategory(id) {
+  state.activeCategory = id;
+  if (state.isExternalMode && id !== 'all') {
     state.isExternalMode = false;
     state.externalPins = [];
   }
   render();
-  if (window.scrollY < window.innerHeight * 0.55) {
-    document.getElementById('gallery').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  if (window.scrollY < window.innerHeight * 0.5) {
+    $('gallery')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 }
 
-dom.heroCats.addEventListener('click', (e) => {
+dom.heroCats?.addEventListener('click', e => {
   const btn = e.target.closest('[data-category]');
-  if (!btn) return;
-  setActiveCategory(btn.dataset.category);
+  if (btn) setActiveCategory(btn.dataset.category);
+});
+dom.galleryFilters?.addEventListener('click', e => {
+  const btn = e.target.closest('[data-category]');
+  if (btn) setActiveCategory(btn.dataset.category);
 });
 
-dom.galleryFilters.addEventListener('click', (e) => {
-  const btn = e.target.closest('[data-category]');
-  if (!btn) return;
-  setActiveCategory(btn.dataset.category);
-});
-
-/* ---------------------------------------------------------
-   9) جستجوی پیشرفته + فیلتر ترکیبی + امتیازدهی
-   --------------------------------------------------------- */
-/**
- * امتیاز مرتبط بودن یک پین با عبارت جستجو
- * وزن‌ها: title (۴) > tags (۳) > subcategory (۲) > category (۲) > note (۱)
- */
+/* ---------- Search scoring ---------- */
 function scorePin(pin, tokens) {
   if (!tokens.length) return 1;
-
   const cat = categoryById[pin.category];
   const fields = [
-    { text: (pin.title || '').toLowerCase(), weight: 4 },
-    { text: (pin.tags || []).join(' ').toLowerCase(), weight: 3 },
-    { text: (pin.subcategory || '').toLowerCase(), weight: 2 },
-    { text: (cat ? cat.label : '').toLowerCase(), weight: 2 },
-    { text: (pin.note || '').toLowerCase(), weight: 1 },
+    { t: (pin.title || '').toLowerCase(), w: 4 },
+    { t: (pin.tags || []).join(' ').toLowerCase(), w: 3 },
+    { t: (pin.subcategory || '').toLowerCase(), w: 2 },
+    { t: (cat?.label || '').toLowerCase(), w: 2 },
+    { t: (pin.note || '').toLowerCase(), w: 1 },
   ];
-
-  let score = 0;
-  let matchedTokens = 0;
-
-  for (const token of tokens) {
-    let tokenHit = false;
+  let score = 0, hits = 0;
+  for (const tok of tokens) {
+    let hit = false;
     for (const f of fields) {
-      if (f.text.includes(token)) {
-        score += f.weight;
-        tokenHit = true;
-      }
+      if (f.t.includes(tok)) { score += f.w; hit = true; }
     }
-    if (tokenHit) matchedTokens++;
+    if (hit) hits++;
   }
-
-  // همه توکن‌ها باید حداقل یک بار پیدا شوند (AND منطقی)
-  if (matchedTokens < tokens.length) return 0;
-  return score;
+  return hits < tokens.length ? 0 : score;
 }
 
 function getFilteredPins() {
-  const term = state.searchTerm.trim().toLowerCase();
-  const tokens = term ? term.split(/\s+/).filter(Boolean) : [];
+  const tokens = state.searchTerm.trim().toLowerCase().split(/\s+/).filter(Boolean);
 
-  // اگر در حالت نتایج خارجی هستیم
-  if (state.isExternalMode && state.externalPins.length) {
-    let list = state.externalPins;
-    if (state.activeCategory !== 'all') {
-      list = list.filter(p => p.category === state.activeCategory);
-    }
-    if (tokens.length) {
-      list = list
-        .map(p => ({ pin: p, score: scorePin(p, tokens) }))
-        .filter(x => x.score > 0)
-        .sort((a, b) => b.score - a.score)
-        .map(x => x.pin);
-    }
-    return list;
-  }
-
-  // آرشیو شخصی + فیلتر ترکیبی
-  let list = state.pins;
+  let list = state.isExternalMode ? state.externalPins : state.pins;
 
   if (state.activeCategory !== 'all') {
     list = list.filter(p => p.category === state.activeCategory);
   }
-
   if (!tokens.length) return list;
 
   return list
-    .map(p => ({ pin: p, score: scorePin(p, tokens) }))
-    .filter(x => x.score > 0)
-    .sort((a, b) => b.score - a.score)
-    .map(x => x.pin);
+    .map(p => ({ p, s: scorePin(p, tokens) }))
+    .filter(x => x.s > 0)
+    .sort((a, b) => b.s - a.s)
+    .map(x => x.p);
 }
 
 function pinCardHtml(pin) {
   const cat = categoryById[pin.category] || { label: pin.category, color: '#999' };
-  const tagsHtml = (pin.tags || []).map(t => `<span class="tag">${escapeHtml(t)}</span>`).join('');
-  const externalBadge = pin._external
-    ? `<span class="pin-badge" style="--cat-color:#4fd3c4; inset-inline-start:auto; inset-inline-end:10px;">
-         <span class="dot"></span>${escapeHtml(pin._source || 'external')}
-       </span>`
-    : '';
+  const tags = (pin.tags || []).map(t => `<span class="tag">${escapeHtml(t)}</span>`).join('');
+  const ext = pin._external
+    ? `<span class="pin-badge" style="--cat-color:#4fd3c4;inset-inline-start:auto;inset-inline-end:10px">
+         <span class="dot"></span>${escapeHtml(pin._source || 'ext')}
+       </span>` : '';
   return `
     <article class="pin-card" data-id="${pin.id}" tabindex="0" role="group" aria-label="${escapeHtml(pin.title)}">
       <div class="pin-media">
@@ -366,9 +264,9 @@ function pinCardHtml(pin) {
           <span>تصویر بارگذاری نشد</span>
         </div>
         <span class="pin-badge" style="--cat-color:${cat.color}"><span class="dot"></span>${escapeHtml(cat.label)}</span>
-        ${externalBadge}
+        ${ext}
         <div class="pin-overlay">
-          <div class="tag-row">${tagsHtml}</div>
+          <div class="tag-row">${tags}</div>
           <button class="pin-save" type="button">ذخیره</button>
         </div>
       </div>
@@ -378,39 +276,38 @@ function pinCardHtml(pin) {
           <span class="pin-cat">${escapeHtml(cat.label)}${pin.subcategory ? ' · <b>' + escapeHtml(pin.subcategory) + '</b>' : ''}</span>
         </div>
       </div>
-    </article>
-  `;
+    </article>`;
 }
 
 function render() {
   renderCategoryChips();
 
-  const activeCat = categoryById[state.activeCategory];
-  if (state.isExternalMode) {
-    dom.sectionTitle.textContent = state.searchTerm
-      ? `نتایج «${state.searchTerm}»`
-      : 'نتایج جستجو';
-  } else {
-    dom.sectionTitle.textContent = activeCat && activeCat.id !== 'all'
-      ? activeCat.label
-      : 'آرشیو شخصی';
+  const cat = categoryById[state.activeCategory];
+  if (dom.sectionTitle) {
+    dom.sectionTitle.textContent = state.isExternalMode
+      ? (state.searchTerm ? `نتایج «${state.searchTerm}»` : 'نتایج جستجو')
+      : (cat && cat.id !== 'all' ? cat.label : 'آرشیو شخصی');
   }
 
   const filtered = getFilteredPins();
+  if (dom.resultCount) {
+    dom.resultCount.textContent = filtered.length ? `${filtered.length} پین` : '';
+  }
 
-  dom.resultCount.textContent = filtered.length
-    ? `${filtered.length} پین`
-    : '';
+  if (!dom.masonryGrid || !dom.emptyState) return;
 
   if (filtered.length === 0) {
     dom.masonryGrid.hidden = true;
     dom.emptyState.hidden = false;
-    if (state.searchTerm.trim()) {
-      dom.emptyTitle.textContent = `نتیجه‌ای برای «${state.searchTerm.trim()}» پیدا نشد`;
-      dom.emptyDesc.textContent = 'کلمه‌ی دیگری امتحان کن یا فیلتر دسته‌بندی را پاک کن.';
-    } else {
-      dom.emptyTitle.textContent = 'این دسته‌بندی هنوز خالیه';
-      dom.emptyDesc.textContent = 'با دکمه‌ی «افزودن Pin» اولین آیتم این دسته را اضافه کن.';
+    if (dom.emptyTitle) {
+      dom.emptyTitle.textContent = state.searchTerm
+        ? `نتیجه‌ای برای «${state.searchTerm}» پیدا نشد`
+        : 'این دسته‌بندی هنوز خالیه';
+    }
+    if (dom.emptyDesc) {
+      dom.emptyDesc.textContent = state.searchTerm
+        ? 'کلمه دیگری امتحان کن یا فیلتر را پاک کن.'
+        : 'با «افزودن Pin» اولین آیتم را اضافه کن.';
     }
   } else {
     dom.masonryGrid.hidden = false;
@@ -419,10 +316,8 @@ function render() {
   }
 }
 
-/* ---------------------------------------------------------
-   10) Search (hero) — محلی + خارجی (Unsplash/Pexels)
-   --------------------------------------------------------- */
-async function performSearch(term, { external = false } = {}) {
+/* ---------- Search handlers ---------- */
+async function doSearch(term, external) {
   const q = (term || '').trim();
   state.searchTerm = q;
 
@@ -434,83 +329,78 @@ async function performSearch(term, { external = false } = {}) {
   }
 
   if (external) {
-    // جستجوی ترکیبی: ابتدا محلی فیلتر می‌شود، سپس خارجی اضافه می‌گردد
-    showToast('در حال جستجو در Unsplash و Pexels…');
+    showToast('در حال جستجو…');
     try {
-      const [unsplashRes, pexelsRes] = await Promise.all([
+      const [u, p] = await Promise.all([
         PinAPI.searchExternal(q, 'unsplash'),
         PinAPI.searchExternal(q, 'pexels'),
       ]);
-      state.externalPins = [...unsplashRes, ...pexelsRes];
+      // نتایج خارجی + پین‌های محلی مرتبط
+      const localHits = state.pins.filter(pin => scorePin(pin, q.toLowerCase().split(/\s+/)) > 0);
+      state.externalPins = [...localHits, ...u, ...p];
       state.isExternalMode = true;
       state.activeCategory = 'all';
       render();
-      showToast(`${state.externalPins.length} نتیجه پیدا شد`);
-    } catch (err) {
-      console.error(err);
-      showToast('خطا در جستجوی خارجی');
+      showToast(`${state.externalPins.length} نتیجه`);
+    } catch (e) {
+      console.error(e);
+      showToast('خطا در جستجو');
       state.isExternalMode = false;
       state.externalPins = [];
       render();
     }
   } else {
-    // فقط فیلتر محلی با امتیازدهی
     state.isExternalMode = false;
     state.externalPins = [];
     render();
   }
 
-  document.getElementById('gallery').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  $('gallery')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-dom.heroSearch.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') {
-    e.preventDefault();
-    // Enter = جستجوی خارجی (Unsplash + Pexels)
-    performSearch(dom.heroSearch.value, { external: true });
-  }
-});
-
-dom.heroSearchBtn.addEventListener('click', () => {
-  performSearch(dom.heroSearch.value, { external: true });
-});
-
-// تایپ زنده → فقط فیلتر محلی (سریع)
-dom.heroSearch.addEventListener('input', debounce((e) => {
-  const val = e.target.value;
-  if (!val.trim()) {
+if (dom.heroSearch) {
+  dom.heroSearch.addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      doSearch(dom.heroSearch.value, true);
+    }
+  });
+  dom.heroSearch.addEventListener('input', debounce(e => {
+    const v = e.target.value;
+    if (!v.trim()) {
+      state.searchTerm = '';
+      state.isExternalMode = false;
+      state.externalPins = [];
+      render();
+      return;
+    }
+    // تایپ زنده = فیلتر محلی سریع
+    doSearch(v, false);
+  }, 180));
+}
+if (dom.heroSearchBtn) {
+  dom.heroSearchBtn.addEventListener('click', () => doSearch(dom.heroSearch?.value, true));
+}
+if (dom.clearFiltersBtn) {
+  dom.clearFiltersBtn.addEventListener('click', () => {
     state.searchTerm = '';
+    state.activeCategory = 'all';
     state.isExternalMode = false;
     state.externalPins = [];
+    if (dom.heroSearch) dom.heroSearch.value = '';
     render();
-    return;
-  }
-  // هنگام تایپ فقط محلی فیلتر می‌شود تا سریع بماند
-  state.searchTerm = val;
-  state.isExternalMode = false;
-  state.externalPins = [];
-  render();
-}, 200));
+  });
+}
 
-dom.clearFiltersBtn.addEventListener('click', () => {
-  state.searchTerm = '';
-  state.activeCategory = 'all';
-  state.isExternalMode = false;
-  state.externalPins = [];
-  dom.heroSearch.value = '';
-  render();
-});
-
-/* ---------------------------------------------------------
-   11) Modal – add pin (بدون تغییر منطق اصلی)
-   --------------------------------------------------------- */
+/* ---------- Modal ---------- */
 function populateCategorySelect() {
+  if (!dom.inputCategory) return;
   dom.inputCategory.innerHTML = '<option value="">انتخاب کن…</option>' +
     CATEGORIES.filter(c => c.id !== 'all')
       .map(c => `<option value="${c.id}">${escapeHtml(c.label)}</option>`).join('');
 }
-
 function populateSubcategorySelect(catId) {
+  if (!dom.inputSubcategory) return;
   const cat = categoryById[catId];
   if (!cat || !cat.subcategories.length) {
     dom.inputSubcategory.innerHTML = '<option value="">—</option>';
@@ -521,168 +411,136 @@ function populateSubcategorySelect(catId) {
   dom.inputSubcategory.innerHTML = '<option value="">اختیاری…</option>' +
     cat.subcategories.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
 }
+dom.inputCategory?.addEventListener('change', () => populateSubcategorySelect(dom.inputCategory.value));
 
-dom.inputCategory.addEventListener('change', () => {
-  populateSubcategorySelect(dom.inputCategory.value);
-});
-
-dom.inputImage.addEventListener('input', debounce(() => {
+dom.inputImage?.addEventListener('input', debounce(() => {
   const url = dom.inputImage.value.trim();
+  if (!dom.imgPreview) return;
   if (!url) {
-    dom.imgPreview.innerHTML = `
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
-      <span>پیش‌نمایش تصویر اینجا نمایش داده می‌شود</span>`;
+    dom.imgPreview.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg><span>پیش‌نمایش تصویر اینجا نمایش داده می‌شود</span>`;
     return;
   }
-  const testImg = new Image();
-  testImg.onload = () => {
-    dom.imgPreview.innerHTML = `<img src="${escapeHtml(url)}" alt="پیش‌نمایش" />`;
+  const img = new Image();
+  img.onload = () => { dom.imgPreview.innerHTML = `<img src="${escapeHtml(url)}" alt="پیش‌نمایش" />`; };
+  img.onerror = () => {
+    dom.imgPreview.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg><span>این لینک قابل بارگذاری نیست</span>`;
   };
-  testImg.onerror = () => {
-    dom.imgPreview.innerHTML = `
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
-      <span>این لینک قابل بارگذاری نیست</span>`;
-  };
-  testImg.src = url;
+  img.src = url;
 }, 400));
 
-dom.inputTags.addEventListener('input', () => {
+dom.inputTags?.addEventListener('input', () => {
+  if (!dom.tagPreview) return;
   const tags = parseTags(dom.inputTags.value);
   dom.tagPreview.innerHTML = tags.map(t => `<span class="tag">${escapeHtml(t)}</span>`).join('');
 });
 
 function parseTags(raw) {
-  return raw.split(/[,،]/).map(t => t.trim()).filter(Boolean);
+  return (raw || '').split(/[,،]/).map(t => t.trim()).filter(Boolean);
 }
-
-function isValidUrl(value) {
-  try {
-    const u = new URL(value);
-    return u.protocol === 'http:' || u.protocol === 'https:';
-  } catch {
-    return false;
-  }
+function isValidUrl(v) {
+  try { const u = new URL(v); return u.protocol === 'http:' || u.protocol === 'https:'; }
+  catch { return false; }
 }
-
-function setFieldValid(fieldId, valid) {
-  const field = document.getElementById(fieldId);
-  if (field) field.classList.toggle('invalid', !valid);
+function setFieldValid(id, ok) {
+  const el = $(id);
+  if (el) el.classList.toggle('invalid', !ok);
 }
-
 function validateForm() {
-  let valid = true;
-  const imageVal = dom.inputImage.value.trim();
-  const titleVal = dom.inputTitle.value.trim();
-  const catVal = dom.inputCategory.value;
-
-  const imageOk = imageVal.length > 0 && isValidUrl(imageVal);
-  setFieldValid('field-image', imageOk);
-  if (!imageOk) valid = false;
-
-  const titleOk = titleVal.length > 0;
-  setFieldValid('field-title', titleOk);
-  if (!titleOk) valid = false;
-
-  const catOk = catVal.length > 0;
-  setFieldValid('field-category', catOk);
-  if (!catOk) valid = false;
-
-  return valid;
+  let ok = true;
+  const img = dom.inputImage?.value.trim() || '';
+  const title = dom.inputTitle?.value.trim() || '';
+  const cat = dom.inputCategory?.value || '';
+  if (!(img && isValidUrl(img))) { setFieldValid('field-image', false); ok = false; } else setFieldValid('field-image', true);
+  if (!title) { setFieldValid('field-title', false); ok = false; } else setFieldValid('field-title', true);
+  if (!cat) { setFieldValid('field-category', false); ok = false; } else setFieldValid('field-category', true);
+  return ok;
 }
-
 function resetForm() {
-  dom.pinForm.reset();
-  dom.formErrorBanner.classList.remove('show');
-  dom.formErrorBanner.textContent = '';
+  dom.pinForm?.reset();
+  dom.formErrorBanner?.classList.remove('show');
+  if (dom.formErrorBanner) dom.formErrorBanner.textContent = '';
   ['field-image', 'field-title', 'field-category'].forEach(id => setFieldValid(id, true));
-  dom.imgPreview.innerHTML = `
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
-    <span>پیش‌نمایش تصویر اینجا نمایش داده می‌شود</span>`;
-  dom.tagPreview.innerHTML = '';
+  if (dom.imgPreview) {
+    dom.imgPreview.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg><span>پیش‌نمایش تصویر اینجا نمایش داده می‌شود</span>`;
+  }
+  if (dom.tagPreview) dom.tagPreview.innerHTML = '';
   populateSubcategorySelect('');
 }
 
-let lastFocusedEl = null;
-
+let lastFocus = null;
 function openModal() {
-  lastFocusedEl = document.activeElement;
-  dom.modalOverlay.hidden = false;
+  lastFocus = document.activeElement;
+  if (dom.modalOverlay) dom.modalOverlay.hidden = false;
   document.body.style.overflow = 'hidden';
-  setTimeout(() => dom.inputImage.focus(), 30);
+  setTimeout(() => dom.inputImage?.focus(), 30);
 }
-
-function closeModalFn() {
-  dom.modalOverlay.hidden = true;
+function closeModal() {
+  if (dom.modalOverlay) dom.modalOverlay.hidden = true;
   document.body.style.overflow = '';
   resetForm();
-  if (lastFocusedEl) lastFocusedEl.focus();
+  lastFocus?.focus();
 }
 
-dom.openAddPin.addEventListener('click', openModal);
-dom.closeModal.addEventListener('click', closeModalFn);
-dom.cancelForm.addEventListener('click', closeModalFn);
-dom.modalOverlay.addEventListener('click', (e) => {
-  if (e.target === dom.modalOverlay) closeModalFn();
-});
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && !dom.modalOverlay.hidden) closeModalFn();
+dom.openAddPin?.addEventListener('click', openModal);
+dom.closeModal?.addEventListener('click', closeModal);
+dom.cancelForm?.addEventListener('click', closeModal);
+dom.modalOverlay?.addEventListener('click', e => { if (e.target === dom.modalOverlay) closeModal(); });
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && dom.modalOverlay && !dom.modalOverlay.hidden) closeModal();
 });
 
-dom.pinForm.addEventListener('submit', async (e) => {
+dom.pinForm?.addEventListener('submit', async e => {
   e.preventDefault();
-  dom.formErrorBanner.classList.remove('show');
-
+  dom.formErrorBanner?.classList.remove('show');
   if (!validateForm()) {
-    dom.formErrorBanner.textContent = 'لطفاً فیلدهای الزامی (تصویر، عنوان، دسته‌بندی) را کامل کن.';
-    dom.formErrorBanner.classList.add('show');
-    const firstInvalid = dom.pinForm.querySelector('.invalid input, .invalid select');
-    if (firstInvalid) firstInvalid.focus();
+    if (dom.formErrorBanner) {
+      dom.formErrorBanner.textContent = 'لطفاً فیلدهای الزامی را کامل کن.';
+      dom.formErrorBanner.classList.add('show');
+    }
     return;
   }
-
-  const submitBtn = dom.pinForm.querySelector('.btn-primary');
-  submitBtn.disabled = true;
-  submitBtn.textContent = 'در حال ذخیره…';
-
-  const newPinData = {
-    title: dom.inputTitle.value.trim(),
-    imageUrl: dom.inputImage.value.trim(),
-    category: dom.inputCategory.value,
-    subcategory: dom.inputSubcategory.value || '',
-    tags: parseTags(dom.inputTags.value),
-    note: dom.inputNote.value.trim(),
-    sourceUrl: dom.inputSource.value.trim(),
-  };
-
+  const btn = dom.pinForm.querySelector('.btn-primary');
+  if (btn) { btn.disabled = true; btn.textContent = 'در حال ذخیره…'; }
   try {
-    const created = await PinAPI.create(newPinData);
+    const created = await PinAPI.create({
+      title: dom.inputTitle.value.trim(),
+      imageUrl: dom.inputImage.value.trim(),
+      category: dom.inputCategory.value,
+      subcategory: dom.inputSubcategory?.value || '',
+      tags: parseTags(dom.inputTags?.value),
+      note: dom.inputNote?.value.trim() || '',
+      sourceUrl: dom.inputSource?.value.trim() || '',
+    });
     state.pins = [created, ...state.pins];
     state.activeCategory = 'all';
     state.searchTerm = '';
     state.isExternalMode = false;
     state.externalPins = [];
-    dom.heroSearch.value = '';
+    if (dom.heroSearch) dom.heroSearch.value = '';
     render();
-    closeModalFn();
+    closeModal();
     showToast('Pin با موفقیت اضافه شد ✓');
-    document.getElementById('gallery').scrollIntoView({ behavior: 'smooth', block: 'start' });
-  } catch (err) {
-    dom.formErrorBanner.textContent = 'مشکلی در ذخیره‌سازی پیش اومد. دوباره امتحان کن.';
-    dom.formErrorBanner.classList.add('show');
+    $('gallery')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch {
+    if (dom.formErrorBanner) {
+      dom.formErrorBanner.textContent = 'مشکلی پیش آمد. دوباره امتحان کن.';
+      dom.formErrorBanner.classList.add('show');
+    }
   } finally {
-    submitBtn.disabled = false;
-    submitBtn.textContent = 'ذخیره Pin';
+    if (btn) { btn.disabled = false; btn.textContent = 'ذخیره Pin'; }
   }
 });
 
-/* ---------------------------------------------------------
-   12) Init
-   --------------------------------------------------------- */
+/* ---------- Init ---------- */
 async function init() {
   populateCategorySelect();
   populateSubcategorySelect('');
-  state.pins = await PinAPI.getAll();
+  try {
+    state.pins = await PinAPI.getAll();
+  } catch (e) {
+    console.error('init failed', e);
+    state.pins = [];
+  }
   render();
 }
-
 init();
