@@ -1,17 +1,16 @@
 'use strict';
 
 /* ============================================================
-   PinBoard — منطق برنامه
-   ساختار به‌گونه‌ای است که لایه‌ی PinAPI بعداً می‌تواند با
-   فراخوانی‌های واقعی Pinterest API جایگزین شود، بدون آنکه
-   بقیه‌ی برنامه (رندر، فیلتر، فرم) تغییر کند.
+   PinBoard — منطق برنامه (Immersive Hero edition)
+   ساختار API-ready: لایه‌ی PinAPI بعداً با فراخوانی‌های واقعی
+   Pinterest / Pexels جایگزین می‌شود بدون تغییر رندر/فیلتر/فرم.
    ============================================================ */
 
 /* ---------------------------------------------------------
    1) پیکربندی دسته‌بندی‌ها
    --------------------------------------------------------- */
 const CATEGORIES = [
-  { id: 'all',          label: 'همه ذخیره‌ها', color: '#e6e6e6', subcategories: [] },
+  { id: 'all',          label: 'همه',           color: '#e6e6e6', subcategories: [] },
   { id: 'architecture', label: 'معماری',       color: '#7ea1ff', subcategories: ['خانه‌های مینیمال', 'فضای داخلی', 'نمای بیرونی', 'فضای عمومی'] },
   { id: 'jewelry',      label: 'جواهرات',      color: '#f2c14e', subcategories: ['انگشتر', 'گردنبند', 'دستبند', 'گوشواره'] },
   { id: 'fashion',      label: 'فشن',          color: '#f26fa1', subcategories: ['استریت‌استایل', 'لباس مجلسی', 'اکسسوری', 'کفش'] },
@@ -24,8 +23,6 @@ const categoryById = Object.fromEntries(CATEGORIES.map(c => [c.id, c]));
 
 /* ---------------------------------------------------------
    2) داده‌های Mock
-   (در آینده PinAPI.getAll این آرایه را با نتیجه‌ی واقعی
-   Pinterest API جایگزین می‌کند)
    --------------------------------------------------------- */
 const HEIGHT_VARIANTS = [300, 340, 380, 420, 460, 500, 540, 320, 400, 440];
 function h(seed) { return HEIGHT_VARIANTS[seed % HEIGHT_VARIANTS.length]; }
@@ -51,29 +48,32 @@ let MOCK_PINS = [
 ];
 
 /* ---------------------------------------------------------
-   3) لایه‌ی داده (PinAPI)
-   امروز: کار با آرایه‌ی Mock در حافظه.
-   فردا: می‌توان بدنه‌ی این توابع را با fetch به Pinterest API
-   جایگزین کرد، بدون تغییر در کد رندر/فیلتر/فرم.
+   3) لایه‌ی داده (PinAPI) — آماده برای جایگزینی با API واقعی
    --------------------------------------------------------- */
 const PinAPI = {
   async getAll() {
-    // TODO(pinterest-api): جایگزینی با GET /v5/pins واقعی
+    // TODO(pinterest-api): GET /v5/pins
     return Promise.resolve([...MOCK_PINS]);
   },
   async create(pinData) {
-    // TODO(pinterest-api): جایگزینی با POST /v5/pins واقعی
+    // TODO(pinterest-api): POST /v5/pins
     const newPin = {
-      id: 'p' + (Date.now()),
+      id: 'p' + Date.now(),
       ...pinData,
     };
     MOCK_PINS = [newPin, ...MOCK_PINS];
     return Promise.resolve(newPin);
   },
+  // Placeholder for future external search
+  async searchExternal(query, source = 'pinterest') {
+    // TODO: integrate Pinterest / Pexels search APIs
+    console.info(`[PinAPI] external search stub: "${query}" via ${source}`);
+    return [];
+  },
 };
 
 /* ---------------------------------------------------------
-   4) وضعیت برنامه (State)
+   4) State
    --------------------------------------------------------- */
 const state = {
   pins: [],
@@ -82,11 +82,12 @@ const state = {
 };
 
 /* ---------------------------------------------------------
-   5) رفرنس‌های DOM
+   5) DOM refs
    --------------------------------------------------------- */
 const dom = {
-  categoryList: document.getElementById('categoryList'),
-  quickFilters: document.getElementById('quickFilters'),
+  navBar: document.getElementById('navBar'),
+  heroCats: document.getElementById('heroCats'),
+  galleryFilters: document.getElementById('galleryFilters'),
   masonryGrid: document.getElementById('masonryGrid'),
   emptyState: document.getElementById('emptyState'),
   emptyTitle: document.getElementById('emptyTitle'),
@@ -94,11 +95,9 @@ const dom = {
   clearFiltersBtn: document.getElementById('clearFiltersBtn'),
   sectionTitle: document.getElementById('sectionTitle'),
   resultCount: document.getElementById('resultCount'),
-  searchInput: document.getElementById('searchInput'),
-
-  sidebar: document.getElementById('sidebar'),
-  sidebarToggle: document.getElementById('sidebarToggle'),
-  sidebarOverlay: document.getElementById('sidebarOverlay'),
+  heroSearch: document.getElementById('heroSearch'),
+  heroSearchBtn: document.getElementById('heroSearchBtn'),
+  scrollToGallery: document.getElementById('scrollToGallery'),
 
   openAddPin: document.getElementById('openAddPin'),
   modalOverlay: document.getElementById('modalOverlay'),
@@ -121,7 +120,7 @@ const dom = {
 };
 
 /* ---------------------------------------------------------
-   6) کمک‌تابع‌ها
+   6) Utils
    --------------------------------------------------------- */
 function escapeHtml(str) {
   return String(str ?? '').replace(/[&<>"']/g, (c) => ({
@@ -146,38 +145,62 @@ function showToast(message) {
 }
 
 /* ---------------------------------------------------------
-   7) ساخت سایدبار و فیلترهای سریع
+   7) Nav scroll effect + smooth scroll
    --------------------------------------------------------- */
-function countForCategory(catId) {
-  if (catId === 'all') return state.pins.length;
-  return state.pins.filter(p => p.category === catId).length;
+function updateNavOnScroll() {
+  const scrolled = window.scrollY > 40;
+  dom.navBar.classList.toggle('scrolled', scrolled);
 }
+window.addEventListener('scroll', updateNavOnScroll, { passive: true });
+updateNavOnScroll();
 
-function renderCategoryNav() {
-  dom.categoryList.innerHTML = CATEGORIES.map(cat => `
-    <li>
-      <button class="nav-item ${state.activeCategory === cat.id ? 'active' : ''}"
-              data-category="${cat.id}"
-              style="--cat-color:${cat.color}"
-              aria-pressed="${state.activeCategory === cat.id}">
-        <span class="label"><span class="dot"></span>${escapeHtml(cat.label)}</span>
-        <span class="count">${countForCategory(cat.id)}</span>
-      </button>
-    </li>
-  `).join('');
+dom.scrollToGallery.addEventListener('click', () => {
+  document.getElementById('gallery').scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
 
-  dom.quickFilters.innerHTML = CATEGORIES.map(cat => `
-    <button class="chip ${state.activeCategory === cat.id ? 'active' : ''}"
+/* ---------------------------------------------------------
+   8) Category chips (hero + gallery)
+   --------------------------------------------------------- */
+function renderCategoryChips() {
+  const makeChip = (cat, extraClass = '') => `
+    <button class="${extraClass} ${state.activeCategory === cat.id ? 'active' : ''}"
             data-category="${cat.id}"
             role="tab"
             aria-selected="${state.activeCategory === cat.id}">
       ${escapeHtml(cat.label)}
     </button>
-  `).join('');
+  `;
+
+  // Hero chips (skip "all" or include)
+  dom.heroCats.innerHTML = CATEGORIES.map(c => makeChip(c, 'hero-chip')).join('');
+
+  // Gallery filter chips
+  dom.galleryFilters.innerHTML = CATEGORIES.map(c => makeChip(c, 'g-chip')).join('');
 }
 
+function setActiveCategory(catId) {
+  state.activeCategory = catId;
+  render();
+  // Scroll gallery into view if coming from hero
+  if (window.scrollY < window.innerHeight * 0.6) {
+    document.getElementById('gallery').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+}
+
+dom.heroCats.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-category]');
+  if (!btn) return;
+  setActiveCategory(btn.dataset.category);
+});
+
+dom.galleryFilters.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-category]');
+  if (!btn) return;
+  setActiveCategory(btn.dataset.category);
+});
+
 /* ---------------------------------------------------------
-   8) فیلتر + رندر گرید
+   9) Filter + render grid
    --------------------------------------------------------- */
 function getFilteredPins() {
   const term = state.searchTerm.trim().toLowerCase();
@@ -224,10 +247,12 @@ function pinCardHtml(pin) {
 }
 
 function render() {
-  renderCategoryNav();
+  renderCategoryChips();
 
   const activeCat = categoryById[state.activeCategory];
-  dom.sectionTitle.textContent = activeCat ? activeCat.label : 'همه ذخیره‌ها';
+  dom.sectionTitle.textContent = activeCat && activeCat.id !== 'all'
+    ? activeCat.label
+    : 'آرشیو شخصی';
 
   const filtered = getFilteredPins();
 
@@ -253,58 +278,39 @@ function render() {
 }
 
 /* ---------------------------------------------------------
-   9) رویدادهای فیلتر / جستجو
+   10) Search (hero)
    --------------------------------------------------------- */
-function setActiveCategory(catId) {
-  state.activeCategory = catId;
+function applySearch(term) {
+  state.searchTerm = term;
   render();
+  document.getElementById('gallery').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-dom.categoryList.addEventListener('click', (e) => {
-  const btn = e.target.closest('.nav-item');
-  if (!btn) return;
-  setActiveCategory(btn.dataset.category);
-  closeSidebar();
+dom.heroSearch.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    applySearch(dom.heroSearch.value);
+  }
+});
+dom.heroSearchBtn.addEventListener('click', () => {
+  applySearch(dom.heroSearch.value);
 });
 
-dom.quickFilters.addEventListener('click', (e) => {
-  const btn = e.target.closest('.chip');
-  if (!btn) return;
-  setActiveCategory(btn.dataset.category);
-});
-
-dom.searchInput.addEventListener('input', debounce((e) => {
+// Live local filter while typing (debounced)
+dom.heroSearch.addEventListener('input', debounce((e) => {
   state.searchTerm = e.target.value;
   render();
-}, 180));
+}, 220));
 
 dom.clearFiltersBtn.addEventListener('click', () => {
   state.searchTerm = '';
   state.activeCategory = 'all';
-  dom.searchInput.value = '';
+  dom.heroSearch.value = '';
   render();
 });
 
 /* ---------------------------------------------------------
-   10) سایدبار موبایل/تبلت
-   --------------------------------------------------------- */
-function openSidebar() {
-  dom.sidebar.classList.add('open');
-  dom.sidebarOverlay.classList.add('show');
-  dom.sidebarToggle.setAttribute('aria-expanded', 'true');
-}
-function closeSidebar() {
-  dom.sidebar.classList.remove('open');
-  dom.sidebarOverlay.classList.remove('show');
-  dom.sidebarToggle.setAttribute('aria-expanded', 'false');
-}
-dom.sidebarToggle.addEventListener('click', () => {
-  dom.sidebar.classList.contains('open') ? closeSidebar() : openSidebar();
-});
-dom.sidebarOverlay.addEventListener('click', closeSidebar);
-
-/* ---------------------------------------------------------
-   11) مودال افزودن Pin
+   11) Modal – add pin
    --------------------------------------------------------- */
 function populateCategorySelect() {
   dom.inputCategory.innerHTML = '<option value="">انتخاب کن…</option>' +
@@ -368,7 +374,7 @@ function isValidUrl(value) {
 
 function setFieldValid(fieldId, valid) {
   const field = document.getElementById(fieldId);
-  field.classList.toggle('invalid', !valid);
+  if (field) field.classList.toggle('invalid', !valid);
 }
 
 function validateForm() {
@@ -427,10 +433,7 @@ dom.modalOverlay.addEventListener('click', (e) => {
   if (e.target === dom.modalOverlay) closeModalFn();
 });
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') {
-    if (!dom.modalOverlay.hidden) closeModalFn();
-    else if (dom.sidebar.classList.contains('open')) closeSidebar();
-  }
+  if (e.key === 'Escape' && !dom.modalOverlay.hidden) closeModalFn();
 });
 
 dom.pinForm.addEventListener('submit', async (e) => {
@@ -464,10 +467,11 @@ dom.pinForm.addEventListener('submit', async (e) => {
     state.pins = [created, ...state.pins];
     state.activeCategory = 'all';
     state.searchTerm = '';
-    dom.searchInput.value = '';
+    dom.heroSearch.value = '';
     render();
     closeModalFn();
     showToast('Pin با موفقیت اضافه شد ✓');
+    document.getElementById('gallery').scrollIntoView({ behavior: 'smooth', block: 'start' });
   } catch (err) {
     dom.formErrorBanner.textContent = 'مشکلی در ذخیره‌سازی پیش اومد. دوباره امتحان کن.';
     dom.formErrorBanner.classList.add('show');
@@ -478,7 +482,7 @@ dom.pinForm.addEventListener('submit', async (e) => {
 });
 
 /* ---------------------------------------------------------
-   12) راه‌اندازی اولیه
+   12) Init
    --------------------------------------------------------- */
 async function init() {
   populateCategorySelect();
